@@ -35,7 +35,8 @@ If `videos` is empty and `is_sunday` is false: reply with one line (queue size a
 
 ## 3. The entry
 
-About 800 to 1,000 words. Plain, simple English for a developer learning Node.js and TypeScript backend work
+800 to 1,000 words in total, never more than 1,000: "What was said" gets at most 450 of them, so pick the
+key points instead of retelling every detail. Plain, simple English for a developer learning Node.js and TypeScript backend work
 who is preparing for job interviews. Short sentences. No emoji. Fireship is sarcastic: never report a joke as fact.
 Write in a neutral voice: never use "I" and never describe your research, budget or process in the doc.
 
