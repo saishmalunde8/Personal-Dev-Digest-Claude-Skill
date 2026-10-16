@@ -111,6 +111,9 @@ def hn(queries, around):
             "query": query, "tags": "story", "hitsPerPage": 5,
             "numericFilters": f"created_at_i>{int(day - 10 * 86400)},created_at_i<{int(day + 3 * 86400)}"})
         hits = get_json(f"https://hn.algolia.com/api/v1/search?{params}")["hits"]
+        # The search also matches loosely spelled words and post bodies; keep titles that name the topic.
+        words = query.lower().split()
+        hits = [h for h in hits if all(w in (h.get("title") or "").lower() for w in words)]
         if hits:
             break
     hits = sorted(hits, key=lambda h: h.get("points") or 0, reverse=True)[:2]

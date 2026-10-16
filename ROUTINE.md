@@ -21,7 +21,8 @@ If `videos` is empty and `is_sunday` is false: reply with one line (queue size a
    the title, the description and your searches. Never repeat a misheard name.
 3. Run `python3 fireship.py hn "<name>" "<name>" --around <uploaded>` once. Give 1 to 3 SHORT names (one or
    two words each, most distinctive first, for example `"GLM-5.3" "Ox Alpha"`): HN search needs every word of a
-   name to match, so long phrases find nothing. It is free. Use what it prints for the meta line.
+   name to match, so long phrases find nothing. It is free. Use what it prints for the meta line only if the
+   thread's title is clearly about the video's story; otherwise leave the HN part out.
 4. Research, with a hard budget per video: at least 1 and at most 3 web searches, at most 2 page fetches.
    - Always: 1 search to find official links for the 2 or 3 most important names in "Mentioned" (official site,
      docs, GitHub repo, paper, announcement).
