@@ -1,0 +1,5 @@
+# personal run data: queue state and private transcripts
+state.json
+transcripts/
+__pycache__/
+.DS_Store
