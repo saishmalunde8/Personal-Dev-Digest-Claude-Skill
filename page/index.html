@@ -176,14 +176,16 @@ td a{color:var(--biz);font-weight:700}
 <script>
 const TOPICS = { "AI": "t-ai", "Web dev": "t-web", "Security": "t-sec", "Business": "t-biz", "Tools": "t-tools", "Drama": "t-drama" };
 const CLAIM = { Fact: "t-biz", Opinion: "t-tools", Joke: "t-drama" };
+const KIND = { new: "New video", backlog: "Video", news: "News", classic: "Classic" };
+const KIND_FILTER = { All: () => true, Videos: k => k === "new" || k === "backlog", News: k => k === "news", Classics: k => k === "classic" };
 const S = { entries: [], weeks: [], reads: new Map(), loaded: false, problem: "" };
-const ui = { topic: "All", q: "", unreadOnly: false };
+const ui = { topic: "All", kind: "All", q: "", unreadOnly: false };
 const ask = {};
 let db = null, sampleFn = null;
 const app = document.getElementById("app");
 
 try { Object.assign(ui, JSON.parse(localStorage.getItem("fd-ui") || "{}")); } catch (e) {}
-const saveUi = () => { try { localStorage.setItem("fd-ui", JSON.stringify({ topic: ui.topic, unreadOnly: ui.unreadOnly })); } catch (e) {} };
+const saveUi = () => { try { localStorage.setItem("fd-ui", JSON.stringify({ topic: ui.topic, kind: ui.kind, unreadOnly: ui.unreadOnly })); } catch (e) {} };
 
 function h(tag, props, ...kids) {
   const el = document.createElement(tag);
@@ -235,7 +237,7 @@ function card(e, big) {
   return h("a", { class: "card " + topicClass(e) + (big ? " big" : ""), href: "#v-" + e.id },
     h("div", { class: "band" }, (e.tags || []).join(" · "), h("span", { class: "when" }, day(e.uploaded))),
     h("div", { class: "body" }, h("h3", null, e.title), h("p", null, (e.tldr || [])[0] || "")),
-    h("div", { class: "foot" }, mins(e) + " min read", e.kind === "new" ? "· New upload" : "",
+    h("div", { class: "foot" }, mins(e) + " min read", "· " + (KIND[e.kind] || "Video"),
       isRead(e.id) ? h("span", { class: "read" }, "Read") : h("span", { class: "unread" }, "Unread")));
 }
 
@@ -260,6 +262,7 @@ function viewToday() {
 
 function matches(e) {
   if (ui.topic !== "All" && !(e.tags || []).includes(ui.topic)) return false;
+  if (!(KIND_FILTER[ui.kind] || KIND_FILTER.All)(e.kind)) return false;
   if (ui.unreadOnly && isRead(e.id)) return false;
   const q = ui.q.trim().toLowerCase();
   return !q || [e.title, ...(e.tldr || []), ...(e.tags || [])].join(" ").toLowerCase().includes(q);
@@ -280,6 +283,9 @@ function viewAll() {
   return [h("div", { class: "pagehead" }, h("h1", null, "All videos"),
       h("p", { id: "allcount" }, countLine())),
     h("div", { class: "filters" },
+      h("div", { class: "chips", role: "group", "aria-label": "Kind" }, Object.keys(KIND_FILTER).map(name =>
+        h("button", { class: "chip", "aria-pressed": String(ui.kind === name),
+          onclick: () => { ui.kind = name; saveUi(); lastRoute = ""; render(); } }, name))),
       h("div", { class: "chips", role: "group", "aria-label": "Topic" }, chip("All"), Object.keys(TOPICS).map(chip)),
       h("div", { class: "searchrow" },
         h("input", { type: "search", id: "q", placeholder: "Search titles and summaries", value: ui.q, "aria-label": "Search",
@@ -299,9 +305,11 @@ function viewVideo(id) {
   if (i < 0) return [back, S.entries.length ? h("div", { class: "empty" }, h("h2", null, "This note is not here"), h("p", null, "It may have been removed.")) : waiting()];
   const e = S.entries[i];
   const a = ask[id] || (ask[id] = { q: "", answer: "", busy: false });
-  const meta = [h("span", null, "Uploaded " + day(e.uploaded)), h("span", null, e.minutes + " min video"), h("span", null, mins(e) + " min read"),
+  const news = e.kind === "news";
+  const meta = [h("span", null, (news ? "Posted " : "Uploaded ") + day(e.uploaded)), e.minutes ? h("span", null, e.minutes + " min video") : null,
+    h("span", null, mins(e) + " min read"),
     e.sponsor && e.sponsor !== "unknown" ? h("span", null, "Sponsor read skipped (" + e.sponsor + ")") : null,
-    e.kind === "new" ? h("span", null, "New upload") : h("span", null, "From the backlog")];
+    h("span", null, KIND[e.kind] || "Video")];
   const prev = S.entries[i + 1], next = S.entries[i - 1];
   return [back,
     h("div", { class: "hero " + topicClass(e) },
@@ -310,11 +318,11 @@ function viewVideo(id) {
       h("div", { class: "meta" }, meta),
       h("div", { class: "actions" },
         h("button", { class: "btn " + (isRead(id) ? "done" : "primary"), onclick: () => toggleRead(id) }, isRead(id) ? "Read ✓ (tap to undo)" : "Mark as read"),
-        out(e.url, "Watch on YouTube", "btn"),
+        out(e.url, news ? "Read the article" : "Watch on YouTube", "btn"),
         e.hn && https(e.hn.url) ? out(e.hn.url, "Hacker News · " + e.hn.points + " points", "btn") : null)),
     h("div", { class: "tldr" }, h("span", { class: "pill t-flame" }, "TL;DR"), h("ul", null, (e.tldr || []).map(t => h("li", null, t)))),
     section("What was said", "t-web", (e.said || []).map(p => h("p", null, p))),
-    section("Key moments", "t-tools", h("ul", { class: "moments" }, (e.moments || []).map(m => h("li", null, out(at(e, m.t), m.t), h("span", null, m.text))))),
+    (e.moments || []).length ? section("Key moments", "t-tools", h("ul", { class: "moments" }, e.moments.map(m => h("li", null, out(at(e, m.t), m.t), h("span", null, m.text))))) : null,
     section("Claims", "t-ai", h("div", { class: "claims" }, (e.claims || []).map(c => h("div", { class: "claim" }, h("span", { class: "pill " + (CLAIM[c.type] || "t-slate") }, c.type), h("span", null, c.claim))))),
     section("Mentioned", "t-biz", h("div", { class: "tablewrap" }, h("table", null,
       h("thead", null, h("tr", null, h("th", null, "Name"), h("th", null, "What it is"), h("th", null, "Link"))),

@@ -6,15 +6,28 @@ You run unattended once a day. Work only in this folder. Use few steps: every ex
 
 Run `python3 fireship.py prepare` and read the JSON it prints (the manifest).
 
-- `videos`: up to 2 videos to summarise today. Each has `id`, `title`, `url`, `uploaded`, `age_days`,
-  `minutes`, `kind` (`new` or `backlog`), `sponsor_segments` and `transcript_file`.
+- `videos`: up to 2 items to summarise today. Each has `id`, `title`, `url`, `uploaded`, `age_days`,
+  `minutes`, `kind`, `sponsor_segments` and `transcript_file`. `kind` is one of:
+  - `new` or `backlog`: a Fireship video (the main source);
+  - `classic`: an older Fireship "... in 100 Seconds" explainer, used when there is no backlog;
+  - `news`: the day's top dev or AI story on Hacker News, used when there is no backlog. Its `url` is the
+    article, and its `transcript_file` holds the story's details and top comments instead of a transcript.
 - `page`: the web app the notes are saved to.
 - `problems`, `queue`, `is_sunday`, `week_done`.
 
 If `videos` is empty and it is not a Sunday with a non-empty `week_done`: reply with one line (queue size and
 any problems) and stop.
 
-## 2. Research each video, oldest `uploaded` first
+## 2. Research each item, oldest `uploaded` first
+
+For a `news` item: read its `transcript_file`, use 1 page fetch to read the article at `url`, and at most 2 web
+searches for official links. Skip the `hn` command below (the script adds the thread itself). "What was said"
+covers what the article says, then what Hacker News commenters think. Leave `moments` empty.
+
+For a `classic`: it is a short, older explainer, so teach the idea: what it is, why it exists, when to use it,
+with one tiny example. Spend your searches on official links, not follow-up news.
+
+For every item:
 
 1. Read its `transcript_file`: title, upload date, description, and a cleaned transcript with a `[mm:ss]`
    marker every 30 seconds. Sponsor reads are already cut out.
@@ -57,14 +70,14 @@ Write ONE file, `draft.json`, holding all of today's entries:
 Field rules (the check enforces them):
 - `tags`: 1 or 2 of AI, Web dev, Security, Business, Tools, Drama.
 - `tldr`: exactly 3 short lines. `said`: 2 to 8 paragraphs, at most 450 words, the video's story in order.
-- `moments`: 2 to 4 key moments, `t` taken from the transcript's `[mm:ss]` markers.
+- `moments`: 2 to 4 key moments, `t` taken from the transcript's `[mm:ss]` markers (`[]` for `news`).
 - `claims`: 1 to 5, `type` is Fact, Opinion or Joke. Fireship is sarcastic: never report a joke as fact.
 - `mentioned`: 1 to 10 tools, companies, papers. Never the sponsor.
 - `glossary`: 3 to 6 terms. `for_me`: 3 to 5 lines, including one interview angle.
 - `since`: 2 or 3 sentences of follow-up news for backlog videos older than 14 days ("No notable follow-up
   found as of <today>." when the search found nothing). Otherwise `""`.
-- `hn`: `null` when there is no fitting thread.
-- The whole entry: 800 to 1,000 words, never more than 1,000.
+- `hn`: `null` when there is no fitting thread, and always `null` for `news` (the script fills it in).
+- The whole entry: 800 to 1,000 words for videos, 600 to 1,000 for `news` and `classic`, never more than 1,000.
 - `week`: `null`, except on Sundays when `week_done` is not empty:
   `{"from": "<Monday, YYYY-MM-DD>", "to": "<today>", "bullets": ["3 to 8 lines on the week's main stories"]}`,
   from `week_done` only, no research.

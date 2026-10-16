@@ -2,7 +2,7 @@
 """Fireship digest helper: keeps the video queue and prepares clean transcripts.
 
 The daily routine calls:
-  python3 fireship.py prepare            pick today's videos, write transcripts, print a JSON manifest
+  python3 fireship.py prepare [--fill]   pick today's items (videos; news + a classic when no backlog), print a manifest
   python3 fireship.py hn NAME [NAME ...] --around YYYY-MM-DD   Hacker News threads near the upload date
   python3 fireship.py check draft.json   validate the day's entries and prepare them for one database write
   python3 fireship.py done --from draft.json   mark the draft's videos as summarised
@@ -13,6 +13,7 @@ One-time setup:
 import argparse
 import html
 import json
+import random
 import re
 import shutil
 import subprocess
@@ -27,6 +28,7 @@ ROOT = Path(__file__).resolve().parent
 STATE = ROOT / "state.json"
 TRANSCRIPTS = ROOT / "transcripts"
 OUTBOX = ROOT / "outbox"
+BACKUP = ROOT.parent / f"{ROOT.name}-backup"  # a copy of every saved note, outside the repo
 CHANNEL = "https://www.youtube.com/@Fireship/videos"
 BACKLOG_SIZE = 20
 PER_DAY = 2
@@ -36,6 +38,16 @@ YTDLP = shutil.which("yt-dlp") or "/opt/homebrew/bin/yt-dlp"
 BREW = shutil.which("brew") or "/opt/homebrew/bin/brew"
 TAGS = ["AI", "Web dev", "Security", "Business", "Tools", "Drama"]
 CLAIM_TYPES = {"Fact", "Opinion", "Joke"}
+NEWS_MIN_POINTS = 300
+# A story counts as dev or AI news when its title or site matches one of these.
+NEWS_TOPIC = re.compile(
+    r"\b(ai|llms?|gpt|claude|gemini|openai|anthropic|neural|machine learning|deep learning|agents?|"
+    r"open[- ]source|open[- ]weights?|github|git|linux|kernel|unix|bsd|rust|python|javascript|typescript|"
+    r"node\.?js|deno|bun|react|webassembly|wasm|browsers?|chrome|firefox|apis?|databases?|postgres(ql)?|sql|"
+    r"sqlite|redis|compilers?|programming|programmers?|coding|developers?|software|security|"
+    r"vulnerabilit(y|ies)|exploits?|spyware|malware|cve|hackers?|cloud|aws|docker|kubernetes|"
+    r"self[- ]host(ed|ing)?|servers?|wayland|gpus?|cpus?|nvidia)\b|code|\.ai/|github\.com|huggingface\.co|arxiv\.org",
+    re.I)
 NOT_A_YTDLP_BUG = ("Video unavailable", "Private video", "has been removed", "not a valid URL")
 upgraded = False
 
@@ -86,11 +98,43 @@ def sync(state):
                           "attempts": 0, "first_seen": date.today().isoformat()}
 
 
-def candidates(state):
-    """New uploads first (oldest new first), then the backlog from its oldest video."""
+def candidates(state, fill):
+    """New uploads first (oldest new first), then the backlog from its oldest video.
+    With fill, act as if the backlog were empty, so free slots go to news and a classic."""
     open_ = [(vid, v) for vid, v in state["videos"].items()
-             if v["status"] in ("pending", "failed") and v["attempts"] < MAX_ATTEMPTS]
+             if v["status"] in ("pending", "failed") and v["attempts"] < MAX_ATTEMPTS
+             and not (fill and v["kind"] != "new")]
     return sorted(open_, key=lambda item: (item[1]["kind"] != "new", item[1]["seq"]))
+
+
+def pick_news(state):
+    """Today's most-upvoted dev or AI story on Hacker News (300+ points, last 36 hours, not covered yet)."""
+    since = int(datetime.now().timestamp()) - 36 * 3600
+    params = urllib.parse.urlencode({"tags": "story", "hitsPerPage": 50,
+                                     "numericFilters": f"points>={NEWS_MIN_POINTS},created_at_i>{since}"})
+    hits = get_json(f"https://hn.algolia.com/api/v1/search?{params}")["hits"]
+    for h in sorted(hits, key=lambda h: h.get("points") or 0, reverse=True):
+        vid = f"news-{h['objectID']}"
+        if h.get("url") and vid not in state["videos"] and NEWS_TOPIC.search(f"{h['title']} {h['url']}"):
+            return vid, {"title": h["title"], "kind": "news", "seq": 0, "status": "pending", "attempts": 0,
+                         "first_seen": date.today().isoformat(),
+                         "story": {"url": h["url"], "points": h["points"], "comments": h.get("num_comments", 0),
+                                   "hn_url": f"https://news.ycombinator.com/item?id={h['objectID']}",
+                                   "posted": h["created_at"][:10]}}
+    return None
+
+
+def pick_classic(state):
+    """A random Fireship "... in 100 Seconds" video not covered yet. The list is refreshed weekly."""
+    if (date.today() - date.fromisoformat(state.get("classics_on", "2000-01-01"))).days >= 7:
+        state["classics"] = [v for v in list_channel(2000) if "in 100 seconds" in v["title"].lower()]
+        state["classics_on"] = date.today().isoformat()
+    fresh = [c for c in state.get("classics", []) if c["id"] not in state["videos"]]
+    if not fresh:
+        return None
+    c = random.choice(fresh)
+    return c["id"], {"title": c["title"], "kind": "classic", "seq": 0, "status": "pending", "attempts": 0,
+                     "first_seen": date.today().isoformat()}
 
 
 def sponsor_segments(vid):
@@ -139,13 +183,19 @@ def hn(queries, around):
     for h in hits:
         print(f"{h['title']} | {h.get('points')} points, {h.get('num_comments')} comments"
               f" | https://news.ycombinator.com/item?id={h['objectID']}")
-    # The official API lists comments in HN's ranked order (Algolia's order is oldest first).
-    story = get_json(f"https://hacker-news.firebaseio.com/v0/item/{hits[0]['objectID']}.json") or {}
-    for kid in (story.get("kids") or [])[:3]:
+    for text in top_comments(hits[0]["objectID"], 3, 300):
+        print(f"  top comment: {text}")
+
+
+def top_comments(story_id, count, width):
+    """The first comments of a story in HN's ranked order (Algolia's order is oldest first)."""
+    story = get_json(f"https://hacker-news.firebaseio.com/v0/item/{story_id}.json") or {}
+    texts = []
+    for kid in (story.get("kids") or [])[:count]:
         comment = get_json(f"https://hacker-news.firebaseio.com/v0/item/{kid}.json") or {}
         if comment.get("text") and not comment.get("deleted"):
-            text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", comment["text"])).split())
-            print(f"  top comment: {text[:300]}")
+            texts.append(" ".join(html.unescape(re.sub(r"<[^>]+>", " ", comment["text"])).split())[:width])
+    return texts
 
 
 def caption_lines(vtt):
@@ -217,7 +267,22 @@ def fetch(vid):
             "sponsor_segments": "unknown" if sponsors is None else [[mmss(a), mmss(b)] for a, b in sponsors]}
 
 
-def prepare(state, force):
+def fetch_news(vid, v):
+    """A news story's details and its top comments, written as the 'transcript' the routine reads."""
+    s = v["story"]
+    comments = top_comments(vid.split("-", 1)[1], 6, 500)
+    body = "\n".join(f"- {c}" for c in comments) or "(no comments yet)"
+    TRANSCRIPTS.mkdir(parents=True, exist_ok=True)
+    path = TRANSCRIPTS / f"{vid}.txt"
+    path.write_text(f"TITLE: {v['title']}\nARTICLE: {s['url']}\n"
+                    f"HACKER NEWS: {s['hn_url']} ({s['points']} points, {s['comments']} comments)\n"
+                    f"POSTED: {s['posted']}\n\nTOP COMMENTS (in Hacker News' ranked order):\n{body}\n")
+    return {"id": vid, "title": v["title"], "url": s["url"], "uploaded": s["posted"],
+            "age_days": (date.today() - date.fromisoformat(s["posted"])).days, "minutes": 0,
+            "transcript_file": str(path), "transcript_words": len(body.split()), "sponsor_segments": []}
+
+
+def prepare(state, force, fill=False):
     today = date.today().isoformat()
     sync(state)
     run = state.get("today", {})
@@ -228,22 +293,41 @@ def prepare(state, force):
     else:
         picks, run = None, {"date": today, "ids": []}
     videos, problems = [], []
-    for vid, v in (picks if picks is not None else candidates(state)):
-        if len(videos) == PER_DAY:
-            break
+
+    def take(vid, v):
+        state["videos"][vid] = v
         try:
-            info = fetch(vid)
+            info = fetch_news(vid, v) if v["kind"] == "news" else fetch(vid)
             info["kind"] = v["kind"]
             videos.append(info)
             v["status"] = "pending"
             v["meta"] = {k: info[k] for k in ("title", "url", "uploaded", "minutes", "sponsor_segments", "kind")}
+            if v["kind"] == "news":
+                v["meta"]["story"] = v["story"]
             if vid not in run["ids"]:
                 run["ids"].append(vid)
-        except Exception as err:  # one bad video must not stop the others
+        except Exception as err:  # one bad item must not stop the others
             v["attempts"] += 1
             v["status"] = "failed" if v["attempts"] < MAX_ATTEMPTS else "gave_up"
             v["last_error"] = str(err)
             problems.append({"id": vid, "title": v["title"], "error": str(err), "status": v["status"]})
+
+    for vid, v in (picks if picks is not None else candidates(state, fill)):
+        if len(videos) == PER_DAY:
+            break
+        take(vid, v)
+    if picks is None:
+        # No backlog left (or --fill): free slots get the top dev/AI news story, then a Fireship classic.
+        for pick in (pick_news, pick_classic):
+            if len(videos) == PER_DAY:
+                break
+            try:
+                chosen = pick(state)
+            except Exception as err:
+                problems.append({"id": pick.__name__, "title": "", "error": str(err), "status": "failed"})
+                continue
+            if chosen:
+                take(*chosen)
     state["today"] = run
     week = [{"title": v["title"], "tldr": v.get("tldr", "")} for v in state["videos"].values()
             if v["status"] == "done" and (date.today() - date.fromisoformat(v["done_on"])).days < 7]
@@ -285,8 +369,11 @@ def entry_errors(e, meta):
     need(text_list(e.get("said"), 2, 8), "said: 2 to 8 paragraphs")
     need(count_words(e.get("said")) <= 450, f"said: {count_words(e.get('said'))} words, the limit is 450")
     moments = e.get("moments")
-    need(rows(moments, ["t", "text"], 2, 4) and all(re.fullmatch(r"\d{1,2}:\d{2}", m["t"]) for m in moments),
-         "moments: 2 to 4 rows of {t: 'mm:ss', text}")
+    if meta["kind"] == "news":
+        need(moments in ([], None), "moments: leave empty for news, there is no video")
+    else:
+        need(rows(moments, ["t", "text"], 2, 4) and all(re.fullmatch(r"\d{1,2}:\d{2}", m["t"]) for m in moments),
+             "moments: 2 to 4 rows of {t: 'mm:ss', text}")
     claims = e.get("claims")
     need(rows(claims, ["claim", "type"], 1, 5) and all(c["type"] in CLAIM_TYPES for c in claims),
          "claims: 1 to 5 rows of {claim, type}, type is Fact, Opinion or Joke")
@@ -338,6 +425,9 @@ def check(path, state):
                **{k: e.get(k) for k in ("tags", "tldr", "said", "moments", "claims", "mentioned",
                                         "glossary", "for_me", "hn")},
                "since": e.get("since") or ""}
+        if meta["kind"] == "news":
+            story = meta["story"]
+            doc.update(moments=[], hn={"title": meta["title"], "url": story["hn_url"], "points": story["points"]})
         writes.append(write_doc("entries", vid, doc))
         words[vid] = total
     week = draft.get("week")
@@ -402,6 +492,8 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     prep = sub.add_parser("prepare", help="pick today's videos and write their transcripts")
     prep.add_argument("--force", action="store_true", help="pick fresh videos even if today already ran")
+    prep.add_argument("--fill", action="store_true",
+                      help="act as if the backlog were empty: free slots get news and a classic")
     done = sub.add_parser("done", help="mark the draft's videos as summarised")
     done.add_argument("--from", dest="draft", required=True, help="the draft that check accepted")
     news = sub.add_parser("hn", help="Hacker News threads about a topic near a date")
@@ -426,7 +518,7 @@ def main():
         remind(state, args.reads)
         return
     if args.command == "prepare":
-        print(json.dumps(prepare(state, args.force), indent=2, ensure_ascii=False))
+        print(json.dumps(prepare(state, args.force, args.fill), indent=2, ensure_ascii=False))
     elif args.command == "set-page":
         state["page_url"] = args.url
         print("saved page url")
@@ -438,6 +530,9 @@ def main():
             print(f"marked done: {v['title']}")
         left = [v for v in state["videos"].values() if v["status"] in ("pending", "failed")]
         print(f"backlog left: {sum(v['kind'] == 'backlog' for v in left)}, new waiting: {sum(v['kind'] == 'new' for v in left)}")
+        if OUTBOX.exists():
+            shutil.copytree(OUTBOX, BACKUP, dirs_exist_ok=True)
+            print(f"backup: {BACKUP}")
     STATE.write_text(json.dumps(state, indent=2, ensure_ascii=False))
 
 
