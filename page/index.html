@@ -1,0 +1,430 @@
+<title>Fireship Digest</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: a phone-first reader. A sticky bar holds the tabs and reading stats; Today shows the newest notes,
+   All videos is a filterable card grid, and a video opens as one reading column of colour-labelled sections. */
+:root {
+  --bg:#F3F4F8; --surface:#FFFFFF; --ink:#151722; --muted:#5A5F70; --line:#E2E4EC; --soft:#ECEEF4;
+  --flame:#E64A12; --flame-bg:#FFE9DF; --on-flame:#FFFFFF;
+  --ai:#6B46F5; --ai-bg:#EFEAFF; --web:#0272AD; --web-bg:#E3F3FC; --sec:#C8103B; --sec-bg:#FDE7EC;
+  --biz:#157A3A; --biz-bg:#E2F5E8; --tools:#9A5205; --tools-bg:#FDF0DC; --drama:#A8168F; --drama-bg:#FBE6F7;
+  --teal:#0D6E61; --teal-bg:#DCF3EF; --slate:#46506A; --slate-bg:#E8EBF2;
+  --display:"Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body:"Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
+  --r:16px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:#0F1118; --surface:#181B25; --ink:#ECEEF6; --muted:#A0A6B8; --line:#2A2E3D; --soft:#20242F;
+    --flame:#FF7A45; --flame-bg:#3A1B10; --on-flame:#1A0C05;
+    --ai:#A890FF; --ai-bg:#251F42; --web:#55C6F7; --web-bg:#102A3B; --sec:#FF7590; --sec-bg:#3B1621;
+    --biz:#5ADB8E; --biz-bg:#13301F; --tools:#F7B84A; --tools-bg:#35260D; --drama:#F27FE0; --drama-bg:#391534;
+    --teal:#45D9C3; --teal-bg:#0F2F2B; --slate:#AEB7D0; --slate-bg:#232838;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg:#0F1118; --surface:#181B25; --ink:#ECEEF6; --muted:#A0A6B8; --line:#2A2E3D; --soft:#20242F;
+  --flame:#FF7A45; --flame-bg:#3A1B10; --on-flame:#1A0C05;
+  --ai:#A890FF; --ai-bg:#251F42; --web:#55C6F7; --web-bg:#102A3B; --sec:#FF7590; --sec-bg:#3B1621;
+  --biz:#5ADB8E; --biz-bg:#13301F; --tools:#F7B84A; --tools-bg:#35260D; --drama:#F27FE0; --drama-bg:#391534;
+  --teal:#45D9C3; --teal-bg:#0F2F2B; --slate:#AEB7D0; --slate-bg:#232838;
+  color-scheme: dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:17px/1.62 var(--body);margin:0}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--flame);outline-offset:2px;border-radius:6px}
+.wrap{max-width:880px;margin:0 auto;padding-inline:16px;padding-block:0 56px}
+h1,h2,h3{font-family:var(--display);line-height:1.15;text-wrap:balance;margin:0}
+
+/* top bar */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.bar .wrap{padding-block:12px 0;display:grid;gap:10px}
+.brandrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;font:800 22px/1 var(--display);letter-spacing:-.01em}
+.brand svg{width:30px;height:30px;flex:none}
+.stats{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.stat{font:700 13px/1 var(--body);padding:7px 11px;border-radius:999px;background:var(--surface);border:1px solid var(--line);white-space:nowrap}
+.stat b{color:var(--flame)}
+.tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;margin-inline:-4px;padding-inline:4px}
+.tabs::-webkit-scrollbar{display:none}
+.tabs a{flex:none;text-decoration:none;font:700 15px/1 var(--body);color:var(--muted);padding:10px 12px 12px;border-bottom:3px solid transparent}
+.tabs a[aria-current="page"]{color:var(--ink);border-color:var(--flame)}
+
+/* shared bits */
+.pagehead{display:grid;gap:6px;padding-block:28px 18px}
+.pagehead h1{font-size:clamp(28px,6vw,40px);font-weight:800;letter-spacing:-.02em}
+.pagehead p{margin:0;color:var(--muted);max-width:60ch}
+.pill{display:inline-flex;align-items:center;gap:6px;font:700 12px/1 var(--body);letter-spacing:.06em;text-transform:uppercase;padding:6px 10px;border-radius:999px;color:var(--c,var(--slate));background:var(--cb,var(--slate-bg));white-space:nowrap}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.t-ai{--c:var(--ai);--cb:var(--ai-bg)} .t-web{--c:var(--web);--cb:var(--web-bg)} .t-sec{--c:var(--sec);--cb:var(--sec-bg)}
+.t-biz{--c:var(--biz);--cb:var(--biz-bg)} .t-tools{--c:var(--tools);--cb:var(--tools-bg)} .t-drama{--c:var(--drama);--cb:var(--drama-bg)}
+.t-flame{--c:var(--flame);--cb:var(--flame-bg)} .t-teal{--c:var(--teal);--cb:var(--teal-bg)} .t-slate{--c:var(--slate);--cb:var(--slate-bg)}
+.btn{display:inline-flex;align-items:center;gap:8px;font:700 15px/1 var(--body);padding:11px 16px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;text-decoration:none}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--flame);border-color:transparent;color:var(--on-flame)}
+.btn.done{background:var(--biz-bg);color:var(--biz);border-color:transparent}
+.btn[disabled]{opacity:.55;cursor:default}
+.muted{color:var(--muted)}
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:var(--r);padding:28px 20px;display:grid;gap:8px}
+.empty h2{font-size:22px}
+.empty p{margin:0;color:var(--muted)}
+.divider{height:0;border:0;border-top:2px dashed var(--line);margin:28px 0}
+
+/* cards */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.card{display:grid;grid-template-rows:auto 1fr auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;text-decoration:none;min-width:0}
+.card:hover{border-color:var(--c)}
+.card .band{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;background:var(--cb);color:var(--c);font:700 13px/1.2 var(--body)}
+.card .band .when{margin-left:auto;color:var(--c);opacity:.9}
+.card .body{padding:14px 14px 4px;display:grid;gap:8px;align-content:start}
+.card h3{font-size:19px;font-weight:600}
+.card p{margin:0;color:var(--muted);font-size:15.5px}
+.card .foot{display:flex;gap:10px;align-items:center;padding:10px 14px 14px;font:700 13px/1 var(--body);color:var(--muted)}
+.card .foot .read{margin-left:auto;color:var(--biz)}
+.card .foot .unread{margin-left:auto;color:var(--flame)}
+.card.big h3{font-size:clamp(21px,4vw,26px)}
+.list{display:grid;gap:8px}
+.row{display:flex;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;text-decoration:none;min-width:0}
+.row .ttl{font-weight:700;min-width:0;overflow-wrap:anywhere}
+.row .pill{margin-left:auto}
+
+/* filters */
+.filters{display:grid;gap:12px;margin-bottom:18px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font:700 14px/1 var(--body);padding:9px 13px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--cb,var(--flame-bg));color:var(--c,var(--flame));border-color:transparent}
+.searchrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.searchrow input[type=search]{flex:1 1 220px;min-width:0;font:17px var(--body);padding:11px 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.check{display:inline-flex;gap:8px;align-items:center;font-weight:700;cursor:pointer}
+.check input{width:18px;height:18px;accent-color:var(--flame)}
+
+/* video page */
+.back{display:inline-block;margin-block:20px 12px;font-weight:700;color:var(--muted);text-decoration:none}
+.hero{background:var(--cb);color:var(--ink);border-radius:var(--r);padding:22px 20px;display:grid;gap:14px}
+.hero .tags{display:flex;gap:8px;flex-wrap:wrap}
+.hero .tags .pill{background:var(--surface)}
+.hero h1{font-size:clamp(26px,5.5vw,38px);font-weight:800;letter-spacing:-.02em}
+.meta{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--muted);font-size:15px}
+.meta span{white-space:nowrap}
+.actions{display:flex;flex-wrap:wrap;gap:10px}
+.sec{padding-block:24px;border-top:2px dashed var(--line);display:grid;gap:12px;min-width:0}
+.sec:first-of-type{border-top:0}
+.sec > p,.sec li{max-width:66ch}
+.sec p{margin:0}
+.sec ul{margin:0;padding-left:1.2em;display:grid;gap:8px}
+.tldr{background:var(--flame-bg);border-radius:var(--r);padding:16px 18px;margin-top:18px}
+.tldr ul{font-size:18.5px;font-weight:700}
+.moments{list-style:none;padding:0!important}
+.moments li{display:flex;gap:12px;align-items:baseline}
+.moments a{font:500 14px/1 var(--mono);color:var(--tools);background:var(--tools-bg);padding:6px 8px;border-radius:8px;text-decoration:none;flex:none;font-variant-numeric:tabular-nums}
+.claims{display:grid;gap:8px}
+.claim{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.claim .pill{flex:none}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+th{font:700 12px/1 var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--soft)}
+td a{color:var(--biz);font-weight:700}
+.gloss{display:grid;gap:10px;margin:0}
+.gloss div{display:grid;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.gloss dt{font-weight:700;color:var(--teal)}
+.gloss dd{margin:0}
+.ask{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;gap:10px}
+.ask textarea{width:100%;min-height:76px;font:16px/1.5 var(--body);padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);resize:vertical}
+.answer{white-space:pre-wrap;margin:0}
+.pager{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:28px}
+.pager a{max-width:48%;min-width:0}
+
+/* glossary and tools pages */
+.letter{font:800 26px/1 var(--display);color:var(--teal);margin-block:22px 10px}
+.from{font-size:14px;color:var(--muted)}
+.from a{color:var(--muted)}
+.week{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.week h2{font-size:20px;padding:14px 16px;background:var(--slate-bg);color:var(--slate)}
+.week ul{margin:0;padding:14px 16px 16px 34px;display:grid;gap:8px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:700}
+@media (max-width:520px){ body{font-size:16.5px} .stats{margin-left:0} .pager a{max-width:100%} }
+@media (prefers-reduced-motion: no-preference){ .card,.btn,.chip{transition:border-color .15s,background .15s} }
+</style>
+
+<header class="bar">
+  <div class="wrap">
+    <div class="brandrow">
+      <a class="brand" href="#today" aria-label="Fireship Digest, today">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--flame)"/><path d="M16.6 6c.6 3.3-1.4 5.1-3 6.9-1.5 1.7-2.8 3.4-2.8 5.9 0 3.4 2.6 6.2 5.6 6.2s5.6-2.6 5.6-6c0-2.5-1.3-4.3-2.3-5.4.1 1.6-.4 3-1.6 3.6.3-3.8-.3-8.3-1.5-11.2z" fill="var(--on-flame)"/></svg>
+        Fireship Digest
+      </a>
+      <div class="stats" id="stats"></div>
+    </div>
+    <nav class="tabs" id="tabs">
+      <a href="#today">Today</a>
+      <a href="#all">All videos</a>
+      <a href="#weeks">Weeks</a>
+      <a href="#glossary">Glossary</a>
+      <a href="#tools">Tools</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap" id="app"></main>
+
+<script>
+const TOPICS = { "AI": "t-ai", "Web dev": "t-web", "Security": "t-sec", "Business": "t-biz", "Tools": "t-tools", "Drama": "t-drama" };
+const CLAIM = { Fact: "t-biz", Opinion: "t-tools", Joke: "t-drama" };
+const S = { entries: [], weeks: [], reads: new Map(), loaded: false, problem: "" };
+const ui = { topic: "All", q: "", unreadOnly: false };
+const ask = {};
+let db = null, sampleFn = null;
+const app = document.getElementById("app");
+
+try { Object.assign(ui, JSON.parse(localStorage.getItem("fd-ui") || "{}")); } catch (e) {}
+const saveUi = () => { try { localStorage.setItem("fd-ui", JSON.stringify({ topic: ui.topic, unreadOnly: ui.unreadOnly })); } catch (e) {} };
+
+function h(tag, props, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat(Infinity)) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : String(kid));
+  return el;
+}
+const https = u => (typeof u === "string" && u.startsWith("https://")) ? u : null;
+const out = (url, text, cls) => https(url) ? h("a", { href: url, target: "_blank", rel: "noopener", class: cls }, text) : h("span", { class: cls }, text);
+const topicClass = e => TOPICS[(e.tags || [])[0]] || "t-slate";
+const day = iso => new Date(iso + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+const mins = e => Math.max(1, Math.round((e.words || 600) / 200));
+const isRead = id => S.reads.has(id);
+const localDay = d => d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+const toSeconds = t => { const [m, s] = t.split(":").map(Number); return m * 60 + s; };
+const at = (e, t) => e.url + (e.url.includes("?") ? "&" : "?") + "t=" + toSeconds(t) + "s";
+
+function streak() {
+  const days = new Set([...S.reads.values()].map(v => localDay(new Date(v))));
+  const d = new Date();
+  if (!days.has(localDay(d))) d.setDate(d.getDate() - 1);
+  let n = 0;
+  while (days.has(localDay(d))) { n++; d.setDate(d.getDate() - 1); }
+  return n;
+}
+
+function toast(msg) {
+  const t = h("div", { class: "toast", role: "status" }, msg);
+  document.body.append(t);
+  setTimeout(() => t.remove(), 2600);
+}
+
+async function toggleRead(id) {
+  if (!db) return;
+  const ref = db.collection("reads").doc(id);
+  try {
+    if (isRead(id)) await ref.delete(); else await ref.set({ at: new Date().toISOString() });
+  } catch (e) { toast("Could not save that. Try again."); }
+}
+
+function tags(e, cls) { return (e.tags || []).map(t => h("span", { class: "pill " + (TOPICS[t] || "t-slate") + (cls ? " " + cls : "") }, t)); }
+
+function card(e, big) {
+  return h("a", { class: "card " + topicClass(e) + (big ? " big" : ""), href: "#v-" + e.id },
+    h("div", { class: "band" }, (e.tags || []).join(" · "), h("span", { class: "when" }, day(e.uploaded))),
+    h("div", { class: "body" }, h("h3", null, e.title), h("p", null, (e.tldr || [])[0] || "")),
+    h("div", { class: "foot" }, mins(e) + " min read", e.kind === "new" ? "· New upload" : "",
+      isRead(e.id) ? h("span", { class: "read" }, "Read") : h("span", { class: "unread" }, "Unread")));
+}
+
+function waiting() {
+  if (S.problem) return h("div", { class: "empty" }, h("h2", null, "Notes can't load here"), h("p", null, S.problem));
+  if (!S.loaded) return h("div", { class: "empty" }, h("h2", null, "Loading your notes"), h("p", null, "One moment."));
+  return h("div", { class: "empty" }, h("h2", null, "No notes yet"),
+    h("p", null, "Every day at 11:00 the routine reads two Fireship videos and adds a note for each one here. New notes show up on their own."));
+}
+
+function viewToday() {
+  const head = h("div", { class: "pagehead" }, h("h1", null, "Today"),
+    h("p", null, "The newest notes first. Tap a card to read it, then mark it as read."));
+  if (!S.entries.length) return [head, waiting()];
+  const newest = S.entries.slice(0, 2);
+  const unread = S.entries.slice(2).filter(e => !isRead(e.id)).slice(0, 12);
+  return [head, h("div", { class: "grid" }, newest.map(e => card(e, true))),
+    unread.length ? [h("hr", { class: "divider" }), h("h2", { style: "font-size:22px;margin-bottom:12px" }, "Still unread"),
+      h("div", { class: "list" }, unread.map(e => h("a", { class: "row", href: "#v-" + e.id },
+        h("span", { class: "ttl" }, e.title), h("span", { class: "pill " + topicClass(e) }, (e.tags || [])[0] || "Video"))))] : null];
+}
+
+function matches(e) {
+  if (ui.topic !== "All" && !(e.tags || []).includes(ui.topic)) return false;
+  if (ui.unreadOnly && isRead(e.id)) return false;
+  const q = ui.q.trim().toLowerCase();
+  return !q || [e.title, ...(e.tldr || []), ...(e.tags || [])].join(" ").toLowerCase().includes(q);
+}
+
+function gridAll() {
+  const list = S.entries.filter(matches);
+  return list.length ? h("div", { class: "grid", id: "allgrid" }, list.map(e => card(e)))
+    : h("div", { class: "empty", id: "allgrid" }, h("h2", null, S.entries.length ? "Nothing matches" : "No notes yet"),
+      h("p", null, S.entries.length ? "Try another topic or clear the search." : "Notes appear here after the first daily run."));
+}
+
+function viewAll() {
+  const chip = name => h("button", { class: "chip " + (TOPICS[name] || ""), "aria-pressed": String(ui.topic === name),
+    onclick: () => { ui.topic = name; saveUi(); lastRoute = ""; render(); } }, name);
+  return [h("div", { class: "pagehead" }, h("h1", null, "All videos"),
+      h("p", null, S.entries.length + " notes so far, newest first.")),
+    h("div", { class: "filters" },
+      h("div", { class: "chips", role: "group", "aria-label": "Topic" }, chip("All"), Object.keys(TOPICS).map(chip)),
+      h("div", { class: "searchrow" },
+        h("input", { type: "search", id: "q", placeholder: "Search titles and summaries", value: ui.q, "aria-label": "Search",
+          oninput: ev => { ui.q = ev.target.value; document.getElementById("allgrid").replaceWith(gridAll()); } }),
+        h("label", { class: "check" }, h("input", { type: "checkbox", id: "unread-only", checked: ui.unreadOnly,
+          onchange: ev => { ui.unreadOnly = ev.target.checked; saveUi(); document.getElementById("allgrid").replaceWith(gridAll()); } }), "Unread only"))),
+    gridAll()];
+}
+
+function section(label, cls, ...body) {
+  return h("section", { class: "sec" }, h("div", null, h("span", { class: "pill " + cls }, label)), body);
+}
+
+function viewVideo(id) {
+  const i = S.entries.findIndex(e => e.id === id);
+  const back = h("a", { class: "back", href: "#all" }, "← All videos");
+  if (i < 0) return [back, S.entries.length ? h("div", { class: "empty" }, h("h2", null, "This note is not here"), h("p", null, "It may have been removed.")) : waiting()];
+  const e = S.entries[i];
+  const a = ask[id] || (ask[id] = { q: "", answer: "", busy: false });
+  const meta = [h("span", null, "Uploaded " + day(e.uploaded)), h("span", null, e.minutes + " min video"), h("span", null, mins(e) + " min read"),
+    e.sponsor && e.sponsor !== "unknown" ? h("span", null, "Sponsor read skipped (" + e.sponsor + ")") : null,
+    e.kind === "new" ? h("span", null, "New upload") : h("span", null, "From the backlog")];
+  const prev = S.entries[i + 1], next = S.entries[i - 1];
+  return [back,
+    h("div", { class: "hero " + topicClass(e) },
+      h("div", { class: "tags" }, tags(e)),
+      h("h1", null, e.title),
+      h("div", { class: "meta" }, meta),
+      h("div", { class: "actions" },
+        h("button", { class: "btn " + (isRead(id) ? "done" : "primary"), onclick: () => toggleRead(id) }, isRead(id) ? "Read ✓ (tap to undo)" : "Mark as read"),
+        out(e.url, "Watch on YouTube", "btn"),
+        e.hn && https(e.hn.url) ? out(e.hn.url, "Hacker News · " + e.hn.points + " points", "btn") : null)),
+    h("div", { class: "tldr" }, h("span", { class: "pill t-flame" }, "TL;DR"), h("ul", null, (e.tldr || []).map(t => h("li", null, t)))),
+    section("What was said", "t-web", (e.said || []).map(p => h("p", null, p))),
+    section("Key moments", "t-tools", h("ul", { class: "moments" }, (e.moments || []).map(m => h("li", null, out(at(e, m.t), m.t), h("span", null, m.text))))),
+    section("Claims", "t-ai", h("div", { class: "claims" }, (e.claims || []).map(c => h("div", { class: "claim" }, h("span", { class: "pill " + (CLAIM[c.type] || "t-slate") }, c.type), h("span", null, c.claim))))),
+    section("Mentioned", "t-biz", h("div", { class: "tablewrap" }, h("table", null,
+      h("thead", null, h("tr", null, h("th", null, "Name"), h("th", null, "What it is"), h("th", null, "Link"))),
+      h("tbody", null, (e.mentioned || []).map(m => h("tr", null, h("td", null, h("b", null, m.name)), h("td", null, m.what), h("td", null, https(m.link) ? out(m.link, "Open") : "—"))))))),
+    section("Glossary", "t-teal", h("dl", { class: "gloss" }, (e.glossary || []).map(g => h("div", null, h("dt", null, g.term), h("dd", null, g.meaning))))),
+    section("For me as a developer", "t-drama", h("ul", null, (e.for_me || []).map(t => h("li", null, t)))),
+    e.since ? section("What happened since", "t-slate", h("p", null, e.since)) : null,
+    sampleFn ? section("Ask Claude about this video", "t-flame", h("div", { class: "ask" },
+      h("label", { for: "ask-" + id, class: "muted" }, "Ask anything about this video. Claude answers in simple words, using your plan."),
+      h("textarea", { id: "ask-" + id, placeholder: "For example: what is a feature flag, with a small example?", oninput: ev => { a.q = ev.target.value; } }, a.q),
+      h("div", { class: "actions" },
+        h("button", { class: "btn primary", disabled: a.busy, onclick: () => askClaude(e) }, a.busy ? "Thinking…" : "Ask"),
+        a.busy ? h("button", { class: "btn", onclick: () => a.ctl && a.ctl.abort() }, "Stop") : null),
+      a.answer ? h("p", { class: "answer", id: "answer-" + id }, a.answer) : null)) : null,
+    h("nav", { class: "pager", "aria-label": "More notes" },
+      prev ? h("a", { class: "btn", href: "#v-" + prev.id }, "← Older: " + prev.title) : h("span"),
+      next ? h("a", { class: "btn", href: "#v-" + next.id }, "Newer: " + next.title + " →") : h("span"))];
+}
+
+async function askClaude(e) {
+  const a = ask[e.id];
+  if (!a.q.trim() || !sampleFn || a.busy) return;
+  a.busy = true; a.answer = "Thinking…"; a.ctl = new AbortController(); render();
+  const prompt = "You help a beginner developer understand a tech news video. Answer in simple, everyday words and short sentences. "
+    + "Explain any tech term in a few words. Use at most 150 words. Base your answer on these notes, and say so if they do not cover the question.\n\n"
+    + "Video: " + e.title + "\n\nNotes:\n" + [...(e.tldr || []), ...(e.said || [])].join("\n") + "\n\nGlossary:\n"
+    + (e.glossary || []).map(g => g.term + ": " + g.meaning).join("\n") + "\n\nQuestion: " + a.q.trim();
+  try {
+    const r = await sampleFn(prompt, { signal: a.ctl.signal, onText: ({ text }) => {
+      a.answer = text; const el = document.getElementById("answer-" + e.id); if (el) el.textContent = text; } });
+    a.answer = r.text;
+  } catch (err) {
+    const gone = ["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed"];
+    if (gone.includes(err.code)) { sampleFn = null; a.answer = ""; }
+    else if (err.code === "cancelled") a.answer = err.text || "";
+    else if (err.code === "rate_limited") a.answer = "Claude can't answer right now (too many questions or your usage limit). Try again later.";
+    else a.answer = (err.text ? err.text + "\n\n" : "") + "Something went wrong. Try again.";
+  } finally { a.busy = false; render(); }
+}
+
+function viewWeeks() {
+  return [h("div", { class: "pagehead" }, h("h1", null, "Weeks"), h("p", null, "A short wrap-up every Sunday: the week's main stories in a few lines.")),
+    S.weeks.length ? h("div", { class: "list" }, S.weeks.map(w => h("article", { class: "week" },
+      h("h2", null, "Week of " + day(w.from) + " to " + day(w.to)), h("ul", null, (w.bullets || []).map(b => h("li", null, b))))))
+    : h("div", { class: "empty" }, h("h2", null, "No wrap-ups yet"), h("p", null, "The first one arrives on Sunday."))];
+}
+
+function collect(field, key) {
+  const map = new Map();
+  for (const e of S.entries) for (const item of e[field] || []) {
+    const k = String(item[key] || "").trim().toLowerCase();
+    if (!k) continue;
+    if (!map.has(k)) map.set(k, { item, from: [] });
+    map.get(k).from.push(e);
+  }
+  return [...map.values()].sort((x, y) => String(x.item[key]).localeCompare(String(y.item[key])));
+}
+const fromLine = from => h("div", { class: "from" }, "From: ", from.map((e, i) => [i ? ", " : "", h("a", { href: "#v-" + e.id }, e.title)]));
+
+function viewGlossary() {
+  const terms = collect("glossary", "term");
+  const groups = {};
+  for (const t of terms) (groups[String(t.item.term)[0].toUpperCase()] ||= []).push(t);
+  return [h("div", { class: "pagehead" }, h("h1", null, "Glossary"), h("p", null, terms.length + " terms from your notes, A to Z, in plain words.")),
+    terms.length ? Object.keys(groups).sort().map(L => [h("div", { class: "letter" }, L),
+      h("dl", { class: "gloss" }, groups[L].map(t => h("div", null, h("dt", null, t.item.term), h("dd", null, t.item.meaning), fromLine(t.from))))])
+    : waiting()];
+}
+
+function viewTools() {
+  const tools = collect("mentioned", "name");
+  return [h("div", { class: "pagehead" }, h("h1", null, "Tools and names"), h("p", null, "Everything the videos mentioned, with official links.")),
+    tools.length ? h("div", { class: "tablewrap" }, h("table", null,
+      h("thead", null, h("tr", null, h("th", null, "Name"), h("th", null, "What it is"), h("th", null, "Link"))),
+      h("tbody", null, tools.map(t => h("tr", null, h("td", null, h("b", null, t.item.name), fromLine(t.from)), h("td", null, t.item.what),
+        h("td", null, https(t.item.link) ? out(t.item.link, "Open") : "—")))))) : waiting()];
+}
+
+let lastRoute = "";
+function render() {
+  const route = location.hash.slice(1) || "today";
+  const unread = S.entries.filter(e => !isRead(e.id)).length;
+  const st = document.getElementById("stats");
+  st.replaceChildren(h("span", { class: "stat" }, h("b", null, unread), " unread"),
+    h("span", { class: "stat" }, h("b", null, streak()), " day streak"));
+  for (const a of document.querySelectorAll("#tabs a"))
+    a.setAttribute("aria-current", ("#" + route).startsWith(a.getAttribute("href")) || (route.startsWith("v-") && a.getAttribute("href") === "#all") ? "page" : "false");
+  if (route === "all" && lastRoute === "all" && document.getElementById("allgrid")) {
+    document.getElementById("allgrid").replaceWith(gridAll());
+    return;
+  }
+  const view = route.startsWith("v-") ? viewVideo(route.slice(2)) : ({ today: viewToday, all: viewAll, weeks: viewWeeks, glossary: viewGlossary, tools: viewTools }[route] || viewToday)();
+  app.replaceChildren(...[view].flat(Infinity).filter(Boolean));
+  if (route !== lastRoute) window.scrollTo(0, 0);
+  lastRoute = route;
+}
+
+window.addEventListener("hashchange", render);
+render();
+
+(async () => {
+  const c = window.claude;
+  try { db = c ? await c.use("db") : null; } catch (e) { db = null; }
+  if (!db) { S.problem = "Open this page on claude.ai while signed in to see your notes."; render(); return; }
+  const fail = () => { S.problem = "The notes could not load. Reload the page to try again."; render(); };
+  db.collection("entries").onSnapshot(s => {
+    S.entries = s.docs.map(d => d.data()).sort((x, y) => String(y.added_at).localeCompare(String(x.added_at)) || String(y.uploaded).localeCompare(String(x.uploaded)));
+    S.loaded = true; render();
+  }, fail);
+  db.collection("weeks").onSnapshot(s => { S.weeks = s.docs.map(d => d.data()).sort((x, y) => String(y.from).localeCompare(String(x.from))); render(); }, fail);
+  db.collection("reads").onSnapshot(s => { S.reads = new Map(s.docs.map(d => [d.id, d.data().at])); render(); }, fail);
+  try { sampleFn = c ? await c.use("sample") : null; } catch (e) { sampleFn = null; }
+  render();
+})();
+</script>

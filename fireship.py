@@ -4,9 +4,11 @@
 The daily routine calls:
   python3 fireship.py prepare            pick today's videos, write transcripts, print a JSON manifest
   python3 fireship.py hn NAME [NAME ...] --around YYYY-MM-DD   Hacker News threads near the upload date
-  python3 fireship.py done ID --tldr ..  mark a video as summarised
+  python3 fireship.py check draft.json   validate the day's entries and prepare them for one database write
+  python3 fireship.py done --from draft.json   mark the draft's videos as summarised
+  python3 fireship.py remind --reads N   add an Apple Reminders reminder (N = documents in the page's reads)
 One-time setup:
-  python3 fireship.py set-doc DOC_ID BODY_ID ANCHOR_ID   where entries are written (kept in state.json)
+  python3 fireship.py set-page URL       the web app the entries are written to (kept in state.json)
 """
 import argparse
 import html
@@ -14,6 +16,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -23,20 +26,33 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 STATE = ROOT / "state.json"
 TRANSCRIPTS = ROOT / "transcripts"
+OUTBOX = ROOT / "outbox"
 CHANNEL = "https://www.youtube.com/@Fireship/videos"
 BACKLOG_SIZE = 20
 PER_DAY = 2
 MAX_ATTEMPTS = 3
 MIN_SECONDS = 90  # shorter uploads are treated as Shorts and skipped
 YTDLP = shutil.which("yt-dlp") or "/opt/homebrew/bin/yt-dlp"
+BREW = shutil.which("brew") or "/opt/homebrew/bin/brew"
+TAGS = ["AI", "Web dev", "Security", "Business", "Tools", "Drama"]
+CLAIM_TYPES = {"Fact", "Opinion", "Joke"}
+NOT_A_YTDLP_BUG = ("Video unavailable", "Private video", "has been removed", "not a valid URL")
+upgraded = False
 
 
 def ytdlp(*args):
-    run = subprocess.run([YTDLP, "--no-warnings", "--no-update", *args],
-                         capture_output=True, text=True, timeout=300)
-    if run.returncode != 0:
-        raise RuntimeError(run.stderr.strip()[-400:] or f"yt-dlp exited with {run.returncode}")
-    return run.stdout
+    """Run yt-dlp. YouTube changes often break old versions, so on a failure update it once and retry."""
+    global upgraded
+    while True:
+        run = subprocess.run([YTDLP, "--no-warnings", "--no-update", *args],
+                             capture_output=True, text=True, timeout=300)
+        if run.returncode == 0:
+            return run.stdout
+        error = run.stderr.strip()[-400:] or f"yt-dlp exited with {run.returncode}"
+        if upgraded or any(s in error for s in NOT_A_YTDLP_BUG) or not Path(BREW).exists():
+            raise RuntimeError(error)
+        upgraded = True
+        subprocess.run([BREW, "upgrade", "yt-dlp"], capture_output=True, text=True, timeout=900)
 
 
 def list_channel(count):
@@ -220,6 +236,7 @@ def prepare(state, force):
             info["kind"] = v["kind"]
             videos.append(info)
             v["status"] = "pending"
+            v["meta"] = {k: info[k] for k in ("title", "url", "uploaded", "minutes", "sponsor_segments", "kind")}
             if vid not in run["ids"]:
                 run["ids"].append(vid)
         except Exception as err:  # one bad video must not stop the others
@@ -231,11 +248,153 @@ def prepare(state, force):
     week = [{"title": v["title"], "tldr": v.get("tldr", "")} for v in state["videos"].values()
             if v["status"] == "done" and (date.today() - date.fromisoformat(v["done_on"])).days < 7]
     left = [v for v in state["videos"].values() if v["status"] in ("pending", "failed")]
-    return {"date": today, "is_sunday": date.today().weekday() == 6, "doc": state.get("doc"), "videos": videos,
+    return {"date": today, "is_sunday": date.today().weekday() == 6, "page": state.get("page_url"), "videos": videos,
             "problems": problems,
             "queue": {"backlog_left": sum(v["kind"] == "backlog" for v in left),
                       "new_waiting": sum(v["kind"] == "new" for v in left)},
             "week_done": week if date.today().weekday() == 6 else []}
+
+
+def count_words(value):
+    if isinstance(value, str):
+        return len(value.split())
+    if isinstance(value, dict):
+        return sum(count_words(v) for v in value.values())
+    if isinstance(value, list):
+        return sum(count_words(v) for v in value)
+    return 0
+
+
+def text_list(value, low, high):
+    return isinstance(value, list) and low <= len(value) <= high and all(
+        isinstance(s, str) and s.strip() for s in value)
+
+
+def rows(value, keys, low, high):
+    return isinstance(value, list) and low <= len(value) <= high and all(
+        isinstance(r, dict) and all(isinstance(r.get(k), str) and r[k].strip() for k in keys) for r in value)
+
+
+def entry_errors(e, meta):
+    """Everything wrong with one entry, in plain words the routine can act on."""
+    errors = []
+    need = lambda ok, msg: ok or errors.append(msg)
+    tags = e.get("tags")
+    need(isinstance(tags, list) and 1 <= len(tags) <= 2 and set(tags) <= set(TAGS), f"tags: 1 or 2 of {TAGS}")
+    need(text_list(e.get("tldr"), 3, 3), "tldr: exactly 3 lines")
+    need(text_list(e.get("said"), 2, 8), "said: 2 to 8 paragraphs")
+    need(count_words(e.get("said")) <= 450, f"said: {count_words(e.get('said'))} words, the limit is 450")
+    moments = e.get("moments")
+    need(rows(moments, ["t", "text"], 2, 4) and all(re.fullmatch(r"\d{1,2}:\d{2}", m["t"]) for m in moments),
+         "moments: 2 to 4 rows of {t: 'mm:ss', text}")
+    claims = e.get("claims")
+    need(rows(claims, ["claim", "type"], 1, 5) and all(c["type"] in CLAIM_TYPES for c in claims),
+         "claims: 1 to 5 rows of {claim, type}, type is Fact, Opinion or Joke")
+    mentioned = e.get("mentioned")
+    need(rows(mentioned, ["name", "what"], 1, 10)
+         and all(isinstance(m.get("link"), str) and (m["link"] == "" or m["link"].startswith("https://"))
+                 for m in mentioned),
+         "mentioned: 1 to 10 rows of {name, what, link}, link is '' or starts with https://")
+    need(rows(e.get("glossary"), ["term", "meaning"], 3, 6), "glossary: 3 to 6 rows of {term, meaning}")
+    need(text_list(e.get("for_me"), 3, 5), "for_me: 3 to 5 lines")
+    age = (date.today() - date.fromisoformat(meta["uploaded"])).days
+    since = e.get("since")
+    if meta["kind"] == "backlog" and age > 14:
+        need(isinstance(since, str) and since.strip(), "since: needed, this backlog video is older than 14 days")
+    else:
+        need(since in ("", None), "since: leave empty, it is only for backlog videos older than 14 days")
+    hn_thread = e.get("hn")
+    need(hn_thread is None or (isinstance(hn_thread, dict) and isinstance(hn_thread.get("title"), str)
+                               and isinstance(hn_thread.get("points"), int)
+                               and str(hn_thread.get("url", "")).startswith("https://news.ycombinator.com/item?id=")),
+         "hn: null or {title, url (news.ycombinator.com/item?id=...), points (a number)}")
+    total = count_words({k: e.get(k) for k in ("tldr", "said", "moments", "claims", "mentioned",
+                                                 "glossary", "for_me", "since")})
+    need(total <= 1000, f"the whole entry is {total} words, the limit is 1,000")
+    return errors, total
+
+
+def check(path, state):
+    """Validate the routine's draft. On success write one JSON file per database document and print the batch."""
+    draft = json.loads(Path(path).read_text())
+    today_ids = state.get("today", {}).get("ids", [])
+    shutil.rmtree(OUTBOX, ignore_errors=True)
+    errors, writes, words = [], [], {}
+    added = datetime.now().isoformat(timespec="seconds")
+    for e in draft.get("entries", []):
+        vid = e.get("id")
+        v = state["videos"].get(vid, {})
+        if vid not in today_ids or "meta" not in v:
+            errors.append(f"{vid}: not one of today's videos")
+            continue
+        problems, total = entry_errors(e, v["meta"])
+        errors += [f"{vid}: {p}" for p in problems]
+        if problems:
+            continue
+        meta, segs = v["meta"], v["meta"]["sponsor_segments"]
+        doc = {"id": vid, "title": meta["title"], "url": meta["url"], "uploaded": meta["uploaded"],
+               "minutes": meta["minutes"], "kind": meta["kind"], "added_at": added, "words": total,
+               "sponsor": "unknown" if segs == "unknown" else ", ".join(f"{a}–{b}" for a, b in segs),
+               **{k: e.get(k) for k in ("tags", "tldr", "said", "moments", "claims", "mentioned",
+                                        "glossary", "for_me", "hn")},
+               "since": e.get("since") or ""}
+        writes.append(write_doc("entries", vid, doc))
+        words[vid] = total
+    week = draft.get("week")
+    if week is not None:
+        ok = (isinstance(week, dict) and text_list(week.get("bullets"), 3, 8)
+              and all(re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(week.get(k, ""))) for k in ("from", "to")))
+        if ok:
+            writes.append(write_doc("weeks", week["from"], {**week, "added_at": added}))
+        else:
+            errors.append("week: {from: 'YYYY-MM-DD', to: 'YYYY-MM-DD', bullets: 3 to 8 lines} or null")
+    if not draft.get("entries") and week is None:
+        errors.append("the draft has no entries and no week")
+    if errors:
+        print("NOT READY. Fix these in the draft, then run check again:")
+        print("\n".join(f"- {e}" for e in errors))
+        sys.exit(1)
+    print(json.dumps({"ready": True, "words": words, "writes": writes}, indent=1))
+
+
+def write_doc(collection, doc_id, doc):
+    path = OUTBOX / collection / f"{doc_id}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(doc, ensure_ascii=False))
+    return {"op": "set", "collection": collection, "doc_id": doc_id, "file_path": str(path)}
+
+
+REMINDER_SCRIPT = """
+on run argv
+  set d to (current date)
+  if (item 3 of argv) is "later" then
+    set d to d + 3600
+  else
+    set hours of d to 13
+    set minutes of d to 0
+    set seconds of d to 0
+  end if
+  tell application "Reminders"
+    make new reminder with properties {name:(item 1 of argv), body:(item 2 of argv), due date:d, remind me date:d}
+  end tell
+end run
+"""
+
+
+def remind(state, reads):
+    """An Apple Reminders reminder at 13:00 (or in an hour when later): iCloud brings it to the iPhone."""
+    done = [v for v in state["videos"].values() if v["status"] == "done"]
+    new = [state["videos"][i]["title"] for i in state.get("today", {}).get("ids", [])
+           if state["videos"][i]["status"] == "done"]
+    unread = max(len(done) - reads, 0)
+    name = f"Read Fireship Digest: {len(new)} new, {unread} unread"
+    body = "\n".join([*new, state.get("page_url", "")]).strip()
+    when = "later" if datetime.now().hour >= 13 else "today"
+    run = subprocess.run(["osascript", "-e", REMINDER_SCRIPT, name, body, when],
+                         capture_output=True, text=True, timeout=60)
+    if run.returncode != 0:
+        raise SystemExit(f"reminder failed: {run.stderr.strip()}")
+    print(f"reminder added: {name}")
 
 
 def main():
@@ -243,32 +402,42 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     prep = sub.add_parser("prepare", help="pick today's videos and write their transcripts")
     prep.add_argument("--force", action="store_true", help="pick fresh videos even if today already ran")
-    done = sub.add_parser("done", help="mark a video as summarised")
-    done.add_argument("id")
-    done.add_argument("--tldr", default="", help="one-line summary kept for the Sunday wrap-up")
+    done = sub.add_parser("done", help="mark the draft's videos as summarised")
+    done.add_argument("--from", dest="draft", required=True, help="the draft that check accepted")
     news = sub.add_parser("hn", help="Hacker News threads about a topic near a date")
     news.add_argument("queries", nargs="+", help="short names, most distinctive first")
     news.add_argument("--around", required=True, help="the video's upload date, YYYY-MM-DD")
-    doc = sub.add_parser("set-doc", help="save where entries are written")
-    doc.add_argument("doc_id")
-    doc.add_argument("body_id")
-    doc.add_argument("anchor_id", help="block that new entries are inserted after")
+    chk = sub.add_parser("check", help="validate the draft and prepare one database write")
+    chk.add_argument("draft")
+    rem = sub.add_parser("remind", help="add today's reading reminder to Apple Reminders")
+    rem.add_argument("--reads", type=int, required=True, help="number of documents in the page's reads")
+    page = sub.add_parser("set-page", help="save the web app's URL")
+    page.add_argument("url")
     args = parser.parse_args()
 
     if args.command == "hn":
         hn(args.queries, args.around)
         return
     state = json.loads(STATE.read_text()) if STATE.exists() else {"videos": {}}
+    if args.command == "check":
+        check(args.draft, state)
+        return
+    if args.command == "remind":
+        remind(state, args.reads)
+        return
     if args.command == "prepare":
         print(json.dumps(prepare(state, args.force), indent=2, ensure_ascii=False))
-    elif args.command == "set-doc":
-        state["doc"] = {"doc_id": args.doc_id, "body_id": args.body_id, "anchor_id": args.anchor_id}
-        print("saved doc ids")
+    elif args.command == "set-page":
+        state["page_url"] = args.url
+        print("saved page url")
     else:
-        v = state["videos"][args.id]
-        v.update(status="done", done_on=date.today().isoformat(), tldr=args.tldr)
-        (TRANSCRIPTS / f"{args.id}.txt").unlink(missing_ok=True)
-        print(f"marked done: {v['title']}")
+        for e in json.loads(Path(args.draft).read_text()).get("entries", []):
+            v = state["videos"][e["id"]]
+            v.update(status="done", done_on=date.today().isoformat(), tldr=e["tldr"][0])
+            (TRANSCRIPTS / f"{e['id']}.txt").unlink(missing_ok=True)
+            print(f"marked done: {v['title']}")
+        left = [v for v in state["videos"].values() if v["status"] in ("pending", "failed")]
+        print(f"backlog left: {sum(v['kind'] == 'backlog' for v in left)}, new waiting: {sum(v['kind'] == 'new' for v in left)}")
     STATE.write_text(json.dumps(state, indent=2, ensure_ascii=False))
 
 

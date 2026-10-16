@@ -3,3 +3,5 @@ state.json
 transcripts/
 __pycache__/
 .DS_Store
+outbox/
+draft.json
