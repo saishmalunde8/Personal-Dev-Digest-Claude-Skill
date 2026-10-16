@@ -95,7 +95,7 @@ stops formatting mistakes before they reach the app, and enforces the length lim
 
 ## Cost
 
-Measured on the Claude Pro plan: one run (two notes, Sonnet) takes about 2 minutes and uses about 2 to 3% of
+Measured on the Claude Pro plan: one run (two notes, Sonnet) takes about 2 minutes and uses about 1 to 2% of
 the 5-hour usage window, and less than 1 point of the weekly limit.
 
 ## Use it yourself
