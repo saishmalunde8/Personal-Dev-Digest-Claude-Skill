@@ -3,16 +3,21 @@
 
 The daily routine calls:
   python3 fireship.py prepare            pick today's videos, write transcripts, print a JSON manifest
+  python3 fireship.py hn QUERY --around YYYY-MM-DD   Hacker News threads near the upload date
   python3 fireship.py done ID --tldr ..  mark a video as summarised
+One-time setup:
+  python3 fireship.py set-doc DOC_ID BODY_ID ANCHOR_ID   where entries are written (kept in state.json)
 """
 import argparse
+import html
 import json
 import re
 import shutil
 import subprocess
 import urllib.error
+import urllib.parse
 import urllib.request
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -85,6 +90,35 @@ def sponsor_segments(vid):
         return None
     except OSError:
         return None  # unknown: SponsorBlock unreachable
+
+
+def get_json(url):
+    request = urllib.request.Request(url, headers={"User-Agent": "fireship-digest"})
+    with urllib.request.urlopen(request, timeout=15) as resp:
+        return json.load(resp)
+
+
+def hn(query, around):
+    """Top 2 Hacker News stories for QUERY from 10 days before to 3 days after the upload, plus 3 top comments."""
+    day = datetime.fromisoformat(around).replace(tzinfo=timezone.utc).timestamp()
+    params = urllib.parse.urlencode({
+        "query": query, "tags": "story", "hitsPerPage": 5,
+        "numericFilters": f"created_at_i>{int(day - 10 * 86400)},created_at_i<{int(day + 3 * 86400)}"})
+    hits = get_json(f"https://hn.algolia.com/api/v1/search?{params}")["hits"]
+    hits = sorted(hits, key=lambda h: h.get("points") or 0, reverse=True)[:2]
+    if not hits:
+        print("no HN discussion found")
+        return
+    for h in hits:
+        print(f"{h['title']} | {h.get('points')} points, {h.get('num_comments')} comments"
+              f" | https://news.ycombinator.com/item?id={h['objectID']}")
+    # The official API lists comments in HN's ranked order (Algolia's order is oldest first).
+    story = get_json(f"https://hacker-news.firebaseio.com/v0/item/{hits[0]['objectID']}.json") or {}
+    for kid in (story.get("kids") or [])[:3]:
+        comment = get_json(f"https://hacker-news.firebaseio.com/v0/item/{kid}.json") or {}
+        if comment.get("text") and not comment.get("deleted"):
+            text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", comment["text"])).split())
+            print(f"  top comment: {text[:300]}")
 
 
 def caption_lines(vtt):
@@ -186,7 +220,7 @@ def prepare(state, force):
     week = [{"title": v["title"], "tldr": v.get("tldr", "")} for v in state["videos"].values()
             if v["status"] == "done" and (date.today() - date.fromisoformat(v["done_on"])).days < 7]
     left = [v for v in state["videos"].values() if v["status"] in ("pending", "failed")]
-    return {"date": today, "is_sunday": date.today().weekday() == 6, "videos": videos,
+    return {"date": today, "is_sunday": date.today().weekday() == 6, "doc": state.get("doc"), "videos": videos,
             "problems": problems,
             "queue": {"backlog_left": sum(v["kind"] == "backlog" for v in left),
                       "new_waiting": sum(v["kind"] == "new" for v in left)},
@@ -201,11 +235,24 @@ def main():
     done = sub.add_parser("done", help="mark a video as summarised")
     done.add_argument("id")
     done.add_argument("--tldr", default="", help="one-line summary kept for the Sunday wrap-up")
+    news = sub.add_parser("hn", help="Hacker News threads about a topic near a date")
+    news.add_argument("query")
+    news.add_argument("--around", required=True, help="the video's upload date, YYYY-MM-DD")
+    doc = sub.add_parser("set-doc", help="save where entries are written")
+    doc.add_argument("doc_id")
+    doc.add_argument("body_id")
+    doc.add_argument("anchor_id", help="block that new entries are inserted after")
     args = parser.parse_args()
 
+    if args.command == "hn":
+        hn(args.query, args.around)
+        return
     state = json.loads(STATE.read_text()) if STATE.exists() else {"videos": {}}
     if args.command == "prepare":
         print(json.dumps(prepare(state, args.force), indent=2, ensure_ascii=False))
+    elif args.command == "set-doc":
+        state["doc"] = {"doc_id": args.doc_id, "body_id": args.body_id, "anchor_id": args.anchor_id}
+        print("saved doc ids")
     else:
         v = state["videos"][args.id]
         v.update(status="done", done_on=date.today().isoformat(), tldr=args.tldr)
