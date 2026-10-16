@@ -19,13 +19,16 @@ If `videos` is empty and `is_sunday` is false: reply with one line (queue size a
    `[mm:ss]` marker every 30 seconds. Sponsor reads are already cut and marked.
 2. Auto-captions mishear names (for example "Ryan Doll" for Ryan Dahl, "Dino" for Deno). Correct names using
    the title, the description and your searches. Never repeat a misheard name.
-3. Pick 1 to 3 keywords for the main story, then run
-   `python3 fireship.py hn "<keywords>" --around <uploaded>` once. It is free. Use what it prints for the meta line.
-4. Research, with a hard budget per video: at most 3 web searches and at most 2 page fetches. Use them for:
-   - official links for the "Mentioned" table (official site, docs, GitHub repo, paper, announcement);
-   - one light check of the video's main claim;
-   - "What happened since", only when `kind` is `backlog` and `age_days` is more than 14.
-   Stop when the budget is spent. Never invent a URL: no link found means the name without a link.
+3. Run `python3 fireship.py hn "<name>" "<name>" --around <uploaded>` once. Give 1 to 3 SHORT names (one or
+   two words each, most distinctive first, for example `"GLM-5.3" "Ox Alpha"`): HN search needs every word of a
+   name to match, so long phrases find nothing. It is free. Use what it prints for the meta line.
+4. Research, with a hard budget per video: at least 1 and at most 3 web searches, at most 2 page fetches.
+   - Always: 1 search to find official links for the 2 or 3 most important names in "Mentioned" (official site,
+     docs, GitHub repo, paper, announcement).
+   - When `kind` is `backlog` and `age_days` is more than 14: 1 search for follow-up news ("What happened since").
+   - If budget is left: one light check of the video's main claim.
+   Never invent a URL. Well-known official homepages you are sure of (like ffmpeg.org) are fine without a
+   search; otherwise no link found means "—" in the Link column.
 5. Write the entry (template below) with ONE call of the Claude Docs `update` tool (section 4).
 6. Only after the write succeeds, run `python3 fireship.py done <id> --tldr "<the TL;DR's first line>"`.
 
@@ -33,6 +36,7 @@ If `videos` is empty and `is_sunday` is false: reply with one line (queue size a
 
 About 800 to 1,000 words. Plain, simple English for a developer learning Node.js and TypeScript backend work
 who is preparing for job interviews. Short sentences. No emoji. Fireship is sarcastic: never report a joke as fact.
+Write in a neutral voice: never use "I" and never describe your research, budget or process in the doc.
 
 ```markdown
 ## <title> · <uploaded, written like Oct 15, 2026>
@@ -64,7 +68,9 @@ who is preparing for job interviews. Short sentences. No emoji. Fireship is sarc
 - <what this changes, what to try, or how it could come up in an interview>
 
 ### What happened since
-<Backlog videos older than 14 days only: 2 or 3 lines. Leave the whole section out otherwise.>
+<Backlog videos older than 14 days only: 2 or 3 lines on what changed after the video, from the follow-up
+search. If it found nothing notable: "No notable follow-up found as of <today>." Leave the whole section out
+for other videos.>
 ```
 
 - Meta line: leave out the sponsor part when `sponsor_segments` is `[]`, write "Sponsor read: unknown" when it
@@ -107,7 +113,8 @@ way (it lands on top):
 
 ## 6. Final reply
 
-One to three lines: the titles summarised, any `problems` from the manifest, and `queue.backlog_left`.
+One to three lines: the titles summarised, any `problems` from the manifest, and how many backlog videos are
+left (`queue.backlog_left` minus the backlog videos you marked done today).
 
 ## Rules
 

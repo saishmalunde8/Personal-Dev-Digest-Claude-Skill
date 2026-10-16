@@ -3,7 +3,7 @@
 
 The daily routine calls:
   python3 fireship.py prepare            pick today's videos, write transcripts, print a JSON manifest
-  python3 fireship.py hn QUERY --around YYYY-MM-DD   Hacker News threads near the upload date
+  python3 fireship.py hn NAME [NAME ...] --around YYYY-MM-DD   Hacker News threads near the upload date
   python3 fireship.py done ID --tldr ..  mark a video as summarised
 One-time setup:
   python3 fireship.py set-doc DOC_ID BODY_ID ANCHOR_ID   where entries are written (kept in state.json)
@@ -98,13 +98,21 @@ def get_json(url):
         return json.load(resp)
 
 
-def hn(query, around):
-    """Top 2 Hacker News stories for QUERY from 10 days before to 3 days after the upload, plus 3 top comments."""
+def hn(queries, around):
+    """Top 2 Hacker News stories from 10 days before to 3 days after the upload, plus 3 top comments.
+
+    HN search needs every word of a query to match, so callers pass short names and the first one
+    with results wins.
+    """
     day = datetime.fromisoformat(around).replace(tzinfo=timezone.utc).timestamp()
-    params = urllib.parse.urlencode({
-        "query": query, "tags": "story", "hitsPerPage": 5,
-        "numericFilters": f"created_at_i>{int(day - 10 * 86400)},created_at_i<{int(day + 3 * 86400)}"})
-    hits = get_json(f"https://hn.algolia.com/api/v1/search?{params}")["hits"]
+    hits = []
+    for query in queries:
+        params = urllib.parse.urlencode({
+            "query": query, "tags": "story", "hitsPerPage": 5,
+            "numericFilters": f"created_at_i>{int(day - 10 * 86400)},created_at_i<{int(day + 3 * 86400)}"})
+        hits = get_json(f"https://hn.algolia.com/api/v1/search?{params}")["hits"]
+        if hits:
+            break
     hits = sorted(hits, key=lambda h: h.get("points") or 0, reverse=True)[:2]
     if not hits:
         print("no HN discussion found")
@@ -236,7 +244,7 @@ def main():
     done.add_argument("id")
     done.add_argument("--tldr", default="", help="one-line summary kept for the Sunday wrap-up")
     news = sub.add_parser("hn", help="Hacker News threads about a topic near a date")
-    news.add_argument("query")
+    news.add_argument("queries", nargs="+", help="short names, most distinctive first")
     news.add_argument("--around", required=True, help="the video's upload date, YYYY-MM-DD")
     doc = sub.add_parser("set-doc", help="save where entries are written")
     doc.add_argument("doc_id")
@@ -245,7 +253,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "hn":
-        hn(args.query, args.around)
+        hn(args.queries, args.around)
         return
     state = json.loads(STATE.read_text()) if STATE.exists() else {"videos": {}}
     if args.command == "prepare":
