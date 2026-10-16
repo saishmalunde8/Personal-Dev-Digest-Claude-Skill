@@ -82,12 +82,12 @@ h1,h2,h3{font-family:var(--display);line-height:1.15;text-wrap:balance;margin:0}
 .card .band{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;background:var(--cb);color:var(--c);font:700 13px/1.2 var(--body)}
 .card .band .when{margin-left:auto;color:var(--c);opacity:.9}
 .card .body{padding:14px 14px 4px;display:grid;gap:8px;align-content:start}
-.card h3{font-size:19px;font-weight:600}
+.card h3{font-size:19px;font-weight:600;text-wrap:pretty}
 .card p{margin:0;color:var(--muted);font-size:15.5px}
 .card .foot{display:flex;gap:10px;align-items:center;padding:10px 14px 14px;font:700 13px/1 var(--body);color:var(--muted)}
 .card .foot .read{margin-left:auto;color:var(--biz)}
 .card .foot .unread{margin-left:auto;color:var(--flame)}
-.card.big h3{font-size:clamp(21px,4vw,26px)}
+.card.big h3{font-size:clamp(20px,3.2vw,23px)}
 .list{display:grid;gap:8px}
 .row{display:flex;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;text-decoration:none;min-width:0}
 .row .ttl{font-weight:700;min-width:0;overflow-wrap:anywhere}
@@ -118,7 +118,7 @@ h1,h2,h3{font-family:var(--display);line-height:1.15;text-wrap:balance;margin:0}
 .sec p{margin:0}
 .sec ul{margin:0;padding-left:1.2em;display:grid;gap:8px}
 .tldr{background:var(--flame-bg);border-radius:var(--r);padding:16px 18px;margin-top:18px}
-.tldr ul{font-size:18.5px;font-weight:700}
+.tldr ul{font-size:18px}
 .moments{list-style:none;padding:0!important}
 .moments li{display:flex;gap:12px;align-items:baseline}
 .moments a{font:500 14px/1 var(--mono);color:var(--tools);background:var(--tools-bg);padding:6px 8px;border-radius:8px;text-decoration:none;flex:none;font-variant-numeric:tabular-nums}
@@ -272,11 +272,13 @@ function gridAll() {
       h("p", null, S.entries.length ? "Try another topic or clear the search." : "Notes appear here after the first daily run."));
 }
 
+const countLine = () => S.entries.length + (S.entries.length === 1 ? " note" : " notes") + " so far, newest first.";
+
 function viewAll() {
   const chip = name => h("button", { class: "chip " + (TOPICS[name] || ""), "aria-pressed": String(ui.topic === name),
     onclick: () => { ui.topic = name; saveUi(); lastRoute = ""; render(); } }, name);
   return [h("div", { class: "pagehead" }, h("h1", null, "All videos"),
-      h("p", null, S.entries.length + " notes so far, newest first.")),
+      h("p", { id: "allcount" }, countLine())),
     h("div", { class: "filters" },
       h("div", { class: "chips", role: "group", "aria-label": "Topic" }, chip("All"), Object.keys(TOPICS).map(chip)),
       h("div", { class: "searchrow" },
@@ -402,6 +404,7 @@ function render() {
     a.setAttribute("aria-current", ("#" + route).startsWith(a.getAttribute("href")) || (route.startsWith("v-") && a.getAttribute("href") === "#all") ? "page" : "false");
   if (route === "all" && lastRoute === "all" && document.getElementById("allgrid")) {
     document.getElementById("allgrid").replaceWith(gridAll());
+    document.getElementById("allcount").textContent = countLine();
     return;
   }
   const view = route.startsWith("v-") ? viewVideo(route.slice(2)) : ({ today: viewToday, all: viewAll, weeks: viewWeeks, glossary: viewGlossary, tools: viewTools }[route] || viewToday)();

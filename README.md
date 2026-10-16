@@ -5,8 +5,18 @@ ease up things.
 A daily routine that turns new [Fireship](https://www.youtube.com/@Fireship) videos into simple, lightly
 researched notes in a small private web app, so I keep up with web dev and AI news without watching everything.
 
-Every day at 11:00 it picks two videos (new uploads first, then a backlog of the 20 most recent), reads their
-captions, checks a few facts, saves one note per video to the app, and adds a reminder to read them.
+Every day at 11:00 it picks up to two videos it has not covered yet, reads their captions, checks a few facts,
+and saves one note per video to the app.
+
+![Today: the newest notes as cards, with the unread count and reading streak](docs/screenshots/today.png)
+
+<p align="center">
+  <img src="docs/screenshots/note-phone.png" width="300" alt="A note on a phone: topic, title, video details, Mark as read, and the TL;DR">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/note-phone-dark.png" width="300" alt="The same note in dark mode: claims marked as fact or joke, then the Mentioned table">
+</p>
+
+![All videos in dark mode: topic filters, search and an unread-only switch above the note cards](docs/screenshots/all-videos-dark.png)
 
 ## The app
 
@@ -21,11 +31,14 @@ A phone-friendly page with five tabs:
 
 Each note has its own page with colour-labelled sections: TL;DR, What was said, Key moments (links that jump
 to that second of the video), Claims (fact, opinion or joke), Mentioned, Glossary, For me as a developer, and
-What happened since (older videos only). A "Mark as read" button feeds the unread count and a reading streak,
-and an "Ask Claude" box answers questions about the video in simple words.
+What happened since (for older videos). "Mark as read" feeds the unread count and a reading streak, and an
+"Ask Claude" box answers questions about the video in simple words.
 
 The notes are written in simple English: short sentences, everyday words, every tech term explained right where
 it appears, and one "think of it like..." comparison per video.
+
+> Side note: each run also adds a reminder to Apple Reminders at 13:00 ("Read Fireship Digest: 2 new,
+> 3 unread", with the titles and the app link). iCloud syncs it to my iPhone, and the app sits on my home screen.
 
 ## How it works
 
@@ -34,7 +47,7 @@ it appears, and one "think of it like..." comparison per video.
   │
   ├─ python3 fireship.py prepare
   │     ├─ yt-dlp lists the channel's Videos tab (Shorts are skipped)
-  │     ├─ state.json keeps the queue: new uploads first, then the backlog oldest first
+  │     ├─ state.json remembers which videos are done; new uploads go first
   │     ├─ yt-dlp downloads English captions and the description (never the video)
   │     ├─ SponsorBlock gives the sponsor segment, which is cut out and replaced by a marker
   │     └─ prints a JSON manifest with today's videos and their clean transcripts
@@ -48,9 +61,8 @@ it appears, and one "think of it like..." comparison per video.
   │     validates every field, the 450-word and 1,000-word limits and the links,
   │     then prepares one JSON file per database document
   ├─ ONE database write (a batch that points at those files, so nothing is retyped)
-  ├─ python3 fireship.py done --from draft.json      marks the videos done, deletes the transcripts
-  └─ python3 fireship.py remind --reads N            adds "Read Fireship Digest: 2 new, 3 unread"
-                                                     to Apple Reminders at 13:00; iCloud brings it to the iPhone
+  ├─ python3 fireship.py done --from draft.json
+  └─ python3 fireship.py remind --reads N
 ```
 
 The model writes content; the script owns format, validation and bookkeeping. That keeps the daily run short,
@@ -58,15 +70,13 @@ stops formatting mistakes before they reach the app, and enforces the length lim
 
 | File | Purpose |
 | --- | --- |
-| `fireship.py` | Queue, captions, sponsor removal, Hacker News lookup, draft check, done marking, reminders |
+| `fireship.py` | Video list, captions, sponsor removal, Hacker News lookup, draft check, done marking, reminder |
 | `ROUTINE.md` | The instructions the scheduled run follows: steps, research budget, draft format, language rules |
 | `page/index.html` | The web app (vanilla JS); it reads the notes from the app's own small database |
 | `state.json`, `transcripts/`, `draft.json`, `outbox/` | Local working data, not in git |
 
 ## Design decisions
 
-- **Two videos a day from a 20-video backlog.** New uploads always go first. Fireship posts about three videos a
-  week, so the backlog clears in about two weeks.
 - **Idempotent runs.** A second run on the same day re-offers only unfinished videos and never picks extra
   ones. A video that fails (no captions yet) is retried on later runs, up to three times.
 - **Self-repairing downloads.** When yt-dlp fails in a way that looks like a YouTube change, the script runs
@@ -88,7 +98,7 @@ Claude desktop app with Claude Code (for local scheduled tasks).
 
 1. Publish `page/index.html` as a Claude artifact with the `db` and `sample` capabilities, then save its link:
    `python3 fireship.py set-page <artifact link>`
-2. Run `python3 fireship.py prepare` once. It queues the last 20 videos and shows the first two.
+2. Run `python3 fireship.py prepare` once to see the first two videos it would pick.
 3. In the Claude app, Code tab, Routines: create a local routine in this folder that runs daily with the prompt
    "Read ROUTINE.md in this folder and follow it exactly", and set its model (Sonnet) and permission mode.
 4. Click "Run now" once. macOS asks once to let Claude control Reminders.
@@ -96,7 +106,7 @@ Claude desktop app with Claude Code (for local scheduled tasks).
 ## Privacy
 
 Only captions and descriptions are downloaded, never the video. Transcripts stay on the local machine and are
-deleted once the note is saved. The app is private to its owner; nothing is republished.
+deleted once the note is saved. The app itself is private; the screenshots above show two real notes.
 
 ## Limitations
 
