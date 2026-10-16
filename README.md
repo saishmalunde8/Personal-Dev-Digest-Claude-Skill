@@ -1,5 +1,7 @@
 # Fireship Digest
 
+I've never skipped a fireship video and I always find those videos useful so this is just a little something to
+ease up things. 
 A daily routine that turns new [Fireship](https://www.youtube.com/@Fireship) videos into simple, lightly
 researched notes in a small private web app, so I keep up with web dev and AI news without watching everything.
 
