@@ -1,4 +1,4 @@
-# Saish's Dev Digest
+# Personal-Dev-Digest
 
 I've never skipped a fireship video and I always find those videos useful so this is just a little something to
 ease up things. 
@@ -108,8 +108,8 @@ nothing here is tied to mine.
 2. Open the folder in a Claude Code session in the desktop app and ask Claude to publish `page/index.html` as
    a private artifact with the `db` and `sample` capabilities. Then save its link:
    `python3 fireship.py set-page <artifact link>`
-3. Edit the reader description in `ROUTINE.md` ("a developer learning Node.js and TypeScript...") to describe
-   you. The "For me as a developer" section is written for that reader.
+3. Optional: in `ROUTINE.md`, section 3, adjust the `for_me` rule (the "For me as a developer" section) to fit
+   what you want from each note.
 4. Run `python3 fireship.py prepare` once to see the first two items it would pick.
 5. In the Claude app, Code tab, Routines: create a local routine in this folder that runs daily with the prompt
    "Read ROUTINE.md in this folder and follow it exactly", and set its model (Sonnet) and permission mode.
@@ -132,3 +132,7 @@ deleted once the note is saved. The app itself is private; the screenshots above
 [yt-dlp](https://github.com/yt-dlp/yt-dlp) for captions, [SponsorBlock](https://sponsor.ajay.app) for sponsor
 segments, the [HN Search API](https://hn.algolia.com/api) and the
 [official Hacker News API](https://github.com/HackerNews/API) for news and discussions.
+
+## License
+
+[MIT](LICENSE)
